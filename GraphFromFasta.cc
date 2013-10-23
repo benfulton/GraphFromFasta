@@ -19,15 +19,9 @@
 
 #undef DEBUG
 
-static float MIN_KMER_ENTROPY = 1.3;
-static float MIN_WELD_ENTROPY = MIN_KMER_ENTROPY;  // min entropy for each half of a welding mer (kk)
 static bool DEBUG = false;
-static float MAX_RATIO_INTERNALLY_REPETITIVE = 0.85;
 
 static bool REPORT_WELDS = false;
-static int MAX_CLUSTER_SIZE = 100;
-static int MIN_CONTIG_LENGTH = 24;
-
 
 
 // print nucleotide sequence 80 chars per line
@@ -141,7 +135,7 @@ void add_reciprocal_iworm_link(map<int,Pool>& weld_reinforced_iworm_clusters, in
 
 
 
-bool is_simple_repeat(const DNAVector& kmer) {
+bool is_simple_repeat(const DNAVector& kmer, float MAX_RATIO_INTERNALLY_REPETITIVE) {
     
     // in the future, should just do SW alignment
     // for now, compare all half-kmers
@@ -266,7 +260,7 @@ float compute_entropy(const DNAVector & kmer) {
     return(entropy);
 }
 
-bool IsSimple(const DNAVector & d) 
+bool IsSimple(const DNAVector & d, float MIN_KMER_ENTROPY) 
 {
    
     // compute entropy
@@ -283,32 +277,11 @@ bool IsSimple(const DNAVector & d)
     else {
         return false;
     }
-    
 
-    /*    old check
-    
-    int i;
-    int k = 0;
-    for (i=2; i<d.isize(); i++) {
-        if (d[i] == d[i-2])
-            k++;
-    }
-    double ratio = (double)k/(double)d.isize();
-    if (ratio > 0.6) {
-
-        if (DEBUG) 
-            cerr << "-Sequence declared low complexity: " << d.AsString() << " with entropy " << e << endl;
-    
-        return true;
-    }
-
-    */
-   
-    
 }
 
 
-bool SimpleHalves(const DNAVector & d) {
+bool SimpleHalves(const DNAVector & d, float MIN_WELD_ENTROPY, float MAX_RATIO_INTERNALLY_REPETITIVE) {
     int len = d.isize();
     int mid_pos = int(len/2);
 
@@ -339,9 +312,9 @@ bool SimpleHalves(const DNAVector & d) {
             || 
             compute_entropy(right) < MIN_WELD_ENTROPY
             ||
-            is_simple_repeat(left)
+            is_simple_repeat(left, MAX_RATIO_INTERNALLY_REPETITIVE)
             ||
-            is_simple_repeat(right)
+            is_simple_repeat(right, MAX_RATIO_INTERNALLY_REPETITIVE)
 
             );
 }
@@ -651,7 +624,7 @@ bool sort_pool_sizes_ascendingly(const Pool& a, const Pool& b) {
 }
 
 
-svec<Pool> bubble_up_cluster_growth(map<int,Pool>& pool, map<int,bool>& ignore) {
+svec<Pool> bubble_up_cluster_growth(map<int,Pool>& pool, map<int,bool>& ignore, int MAX_CLUSTER_SIZE) {
     
     vector<Pool> pool_vec;
     for (map<int,Pool>::iterator it = pool.begin(); it != pool.end(); it++) {
@@ -1129,11 +1102,33 @@ void add_unclustered_iworm_contigs (svec<Pool>& clustered_pools, vecDNAVector& d
     
 }
 
-
-int main(int argc,char** argv)
+struct config
 {
-    
-    
+	string aString;
+	bool sStrand;
+	string readString;
+	int num_threads;
+	bool REPORT_WELDS;
+    double glue_factor;
+    int min_glue_required;
+	int pooling_kmer_size;
+	int welding_kmer_size;
+	double min_iso_ratio;
+    bool bNoWeld;
+    string scaffolding_filename;
+	float MIN_KMER_ENTROPY;
+	float MIN_WELD_ENTROPY;  // min entropy for each half of a welding mer (kk)
+	float MAX_RATIO_INTERNALLY_REPETITIVE;
+
+	int MAX_CLUSTER_SIZE;
+	int MIN_CONTIG_LENGTH;
+
+	config() : MIN_KMER_ENTROPY(1.3), MIN_WELD_ENTROPY(1.3), MAX_RATIO_INTERNALLY_REPETITIVE(0.85), MAX_CLUSTER_SIZE(100), MIN_CONTIG_LENGTH(24) {}
+};
+
+config load_config(int argc,char** argv)
+{
+	config config;    
     commandArg<string> aStringCmmd("-i","input fasta");
     commandArg<string> readStringCmmd("-r","read fasta");
     commandArg<bool> strandCmmd("-strand","strand specific", false);
@@ -1145,15 +1140,15 @@ int main(int argc,char** argv)
     commandArg<double> glueFactorCmmd("-glue_factor", "fraction of max (iworm pair coverage) for read glue support", 0.05);
     commandArg<int> minGlueCmmd("-min_glue", "absolute min glue support required", 2);
     commandArg<double> minIsoRatioCmmd("-min_iso_ratio", "min ratio of (iworm pair coverage) for join", 0.05);
-    commandArg<double> minKmerEntropyCmmd("-min_kmer_entropy", "min entropy value for kmers", MIN_KMER_ENTROPY); 
-    commandArg<double> minWeldEntropyCmmd("-min_weld_entropy", "min entropy value for each half of a welding-(kk)mers", MIN_WELD_ENTROPY); 
-    commandArg<double> maxRatioInternalRepeatCmmd("-max_ratio_internal_repeat", "maximum ratio identical bases in intra-kmer comparisons", MAX_RATIO_INTERNALLY_REPETITIVE);
+    commandArg<double> minKmerEntropyCmmd("-min_kmer_entropy", "min entropy value for kmers", config.MIN_KMER_ENTROPY); 
+    commandArg<double> minWeldEntropyCmmd("-min_weld_entropy", "min entropy value for each half of a welding-(kk)mers", config.MIN_WELD_ENTROPY); 
+    commandArg<double> maxRatioInternalRepeatCmmd("-max_ratio_internal_repeat", "maximum ratio identical bases in intra-kmer comparisons", config.MAX_RATIO_INTERNALLY_REPETITIVE);
     
     commandArg<bool> reportWeldsCmmd("-report_welds", "report the welding kmers", false);
     commandArg<bool> debugCmmd("-debug", "verbosely describes operations", false);
     commandArg<bool> noWeldsCmmd("-no_welds", "disable requirement for glue support", false);
-    commandArg<int>  maxClusterSizeCmmd("-max_cluster_size", "max size for an inchworm cluster", MAX_CLUSTER_SIZE);
-    commandArg<int>  minContigLengthCmmd("-min_contig_length", "min sum cluster contig length", MIN_CONTIG_LENGTH);
+    commandArg<int>  maxClusterSizeCmmd("-max_cluster_size", "max size for an inchworm cluster", config.MAX_CLUSTER_SIZE);
+    commandArg<int>  minContigLengthCmmd("-min_contig_length", "min sum cluster contig length", config.MIN_CONTIG_LENGTH);
 
     commandLineParser P(argc,argv);
     P.SetDescription("Makes a graph out of a fasta");
@@ -1183,48 +1178,54 @@ int main(int argc,char** argv)
     
     P.parse();
     
+    config.aString = P.GetStringValueFor(aStringCmmd); //inchworm contigs file
+    config.sStrand = P.GetBoolValueFor(strandCmmd); // indicates strand-specific mode
+    config.readString = P.GetStringValueFor(readStringCmmd); // rna-seq reads file (strand-oriented if in strand-specific mode
+    // kmer size for pooling, must be 24
+    config.num_threads = P.GetIntValueFor(threadsCmmd);
+    config.REPORT_WELDS = P.GetBoolValueFor(reportWeldsCmmd);
+    config.glue_factor = P.GetDoubleValueFor(glueFactorCmmd);
+    config.min_glue_required = P.GetIntValueFor(minGlueCmmd);
+    config.min_iso_ratio = P.GetDoubleValueFor(minIsoRatioCmmd);
+    config.bNoWeld = P.GetBoolValueFor(noWeldsCmmd);
+    config.scaffolding_filename = P.GetStringValueFor(scaffStringCmmd);
+    config.pooling_kmer_size = P.GetIntValueFor(kCmmd);
+    config.welding_kmer_size = P.GetIntValueFor(kkCmmd); // kmer size for welding, default 48 = kmer + 1/2 kmer on each side of the kmer
+
+    config.MIN_KMER_ENTROPY = P.GetDoubleValueFor(minKmerEntropyCmmd);
+    config.MIN_WELD_ENTROPY = P.GetDoubleValueFor(minWeldEntropyCmmd);
+    config.MAX_RATIO_INTERNALLY_REPETITIVE = P.GetDoubleValueFor(maxRatioInternalRepeatCmmd);
+    config.MAX_CLUSTER_SIZE = P.GetIntValueFor(maxClusterSizeCmmd);
+    config.MIN_CONTIG_LENGTH = P.GetIntValueFor(minContigLengthCmmd);
+
+    if (config.min_glue_required < 1) {
+        cerr << "-error, cannot have less than 1 read as glue.  Setting -min_glue to 1" << endl;
+        config.min_glue_required = 1;
+    }
+    
+	return config;
+}
+
+int main(int argc,char** argv)
+{
     cerr << "-----------------------------------------" << endl
          << "--- Chrysalis: GraphFromFasta -----------" << endl
          << "-- (cluster related inchworm contigs) ---" << endl
          << "-----------------------------------------" << endl << endl;
-    
+	
+	config config = load_config(argc, argv);    
 
+	//DEBUG = P.GetBoolValueFor(debugCmmd);
 
-    string aString = P.GetStringValueFor(aStringCmmd); //inchworm contigs file
-    bool sStrand = P.GetBoolValueFor(strandCmmd); // indicates strand-specific mode
-    string readString = P.GetStringValueFor(readStringCmmd); // rna-seq reads file (strand-oriented if in strand-specific mode
-    // kmer size for pooling, must be 24
-    int num_threads = P.GetIntValueFor(threadsCmmd);
-    REPORT_WELDS = P.GetBoolValueFor(reportWeldsCmmd);
-    double glue_factor = P.GetDoubleValueFor(glueFactorCmmd);
-    int min_glue_required = P.GetIntValueFor(minGlueCmmd);
-    double min_iso_ratio = P.GetDoubleValueFor(minIsoRatioCmmd);
-    bool bNoWeld = P.GetBoolValueFor(noWeldsCmmd);
-    string scaffolding_filename = P.GetStringValueFor(scaffStringCmmd);
-    
-    MIN_KMER_ENTROPY = P.GetDoubleValueFor(minKmerEntropyCmmd);
-    MIN_WELD_ENTROPY = P.GetDoubleValueFor(minWeldEntropyCmmd);
-    MAX_RATIO_INTERNALLY_REPETITIVE = P.GetDoubleValueFor(maxRatioInternalRepeatCmmd);
-    MAX_CLUSTER_SIZE = P.GetIntValueFor(maxClusterSizeCmmd);
-    MIN_CONTIG_LENGTH = P.GetIntValueFor(minContigLengthCmmd);
-    
-    //DEBUG = P.GetBoolValueFor(debugCmmd);
-
-    if (min_glue_required < 1) {
-        cerr << "-error, cannot have less than 1 read as glue.  Setting -min_glue to 1" << endl;
-        min_glue_required = 1;
-    }
-    
-	int pooling_kmer_size = P.GetIntValueFor(kCmmd);
-	if (pooling_kmer_size != 24) {
+	if (config.pooling_kmer_size != 24) {
 		cerr << "The only size of k supported is 24! Exiting!" << endl;
         return -1;
     }
         
         
-    if (num_threads > 0) {
-        cerr << "-setting num threads to: " << num_threads << endl;
-        omp_set_num_threads(num_threads);
+    if (config.num_threads > 0) {
+        cerr << "-setting num threads to: " << config.num_threads << endl;
+        omp_set_num_threads(config.num_threads);
     }
 
     int real_num_threads;
@@ -1239,16 +1240,12 @@ int main(int argc,char** argv)
     
     // read inchworm contigs into memory
     vecDNAVector dna;
-    cerr << "GraphFromFasta: Reading file: " << aString << endl;
-    dna.Read(aString, false, false, true, 1000000);
-    cerr << "done!" << endl;
-    
+    cerr << "GraphFromFasta: Reading file: " << config.aString << endl;
+    dna.Read(config.aString, false, false, true, 1000000);
+    cerr << "done!" << endl;   
         
-    vecDNAVector crossover;
-    
-    int welding_kmer_size = P.GetIntValueFor(kkCmmd); // kmer size for welding, default 48 = kmer + 1/2 kmer on each side of the kmer
-    NonRedKmerTable kmers(welding_kmer_size);
-    Welder weld(pooling_kmer_size, welding_kmer_size); // decides if read support exists to weld two inchworm contigs together into the same component.
+    NonRedKmerTable kmers(config.welding_kmer_size);
+    Welder weld(config.pooling_kmer_size, config.welding_kmer_size); // decides if read support exists to weld two inchworm contigs together into the same component.
 
 
     int iworm_counter = 0;
@@ -1258,13 +1255,13 @@ int main(int argc,char** argv)
     map<int,Pool> weld_reinforced_iworm_clusters;
     map<int,bool> toasted;
     
-    if (scaffolding_filename.length() > 0) {
+    if (config.scaffolding_filename.length() > 0) {
         // add scaffolding info to clusters
-        add_scaffolds_to_clusters(weld_reinforced_iworm_clusters, scaffolding_filename, dna, min_glue_required, glue_factor);
+        add_scaffolds_to_clusters(weld_reinforced_iworm_clusters, config.scaffolding_filename, dna, config.min_glue_required, config.glue_factor);
     }
 
     
-    if (! bNoWeld) { // make this a function
+    if (! config.bNoWeld) { // make this a function
         
         
                 
@@ -1279,7 +1276,7 @@ int main(int argc,char** argv)
         cerr << "Phase 1: Collecting candidate weldmers between iworm contig pairs sharing k-1mers" << endl;
         
 
-        Welder weld(pooling_kmer_size, welding_kmer_size); // decides if read support exists to weld two inchworm contigs together into the same component.
+        Welder weld(config.pooling_kmer_size, config.welding_kmer_size); // decides if read support exists to weld two inchworm contigs together into the same component.
         
         
         int schedule_chunksize = dna.isize() / real_num_threads / 100;
@@ -1291,6 +1288,8 @@ int main(int argc,char** argv)
         double start_time = omp_get_wtime();
         
         iworm_counter = 0;
+		vecDNAVector crossover;
+    
         
         #pragma omp parallel for schedule(dynamic, schedule_chunksize) private(j)
         for (int i=0; i<dna.isize(); i++) {
@@ -1304,11 +1303,11 @@ int main(int argc,char** argv)
                 cerr << "\rProcessed: " << iworm_counter/(double)dna.isize()*100 << " % of iworm contigs.    ";
             }
             
-            for (int j=0; j<=d.isize()-pooling_kmer_size; j++) {
+            for (int j=0; j<=d.isize()-config.pooling_kmer_size; j++) {
                 DNAVector sub; // a kmer
-                sub.SetToSubOf(d, j, pooling_kmer_size);
+                sub.SetToSubOf(d, j, config.pooling_kmer_size);
             
-                if (IsSimple(sub))
+				if (IsSimple(sub, config.MIN_KMER_ENTROPY))
                     continue; // ignore kmers that are low complexity
             
 
@@ -1316,7 +1315,7 @@ int main(int argc,char** argv)
                 svec<KmerAlignCoreRecord> matchesFW, matchesRC;   
             
                 core.GetMatches(matchesFW, sub);
-                if (!sStrand) {
+                if (!config.sStrand) {
                     sub.ReverseComplement();
                     core.GetMatches(matchesRC, sub);
                 }
@@ -1339,11 +1338,11 @@ int main(int argc,char** argv)
                     DNAVector add;
                 
                     weld.WeldableKmer(add, d, j, dd, start);
-                    if (add.isize() > 0 && ! IsSimple(add) && (! SimpleHalves(add) )) {
+					if (add.isize() > 0 && ! IsSimple(add, config.MIN_KMER_ENTROPY) && (! SimpleHalves(add, config.MIN_WELD_ENTROPY, config.MAX_RATIO_INTERNALLY_REPETITIVE) )) {
                         Add(crossover, add, counter);      
                     }
                     weld.WeldableKmer(add, dd, start, d, j);
-                    if (add.isize() > 0 && (! IsSimple(add)) && (! SimpleHalves(add) )) {
+                    if (add.isize() > 0 && (! IsSimple(add, config.MIN_KMER_ENTROPY)) && (! SimpleHalves(add, config.MIN_WELD_ENTROPY, config.MAX_RATIO_INTERNALLY_REPETITIVE) )) {
                         Add(crossover, add, counter);
                     }
                 }
@@ -1354,16 +1353,16 @@ int main(int argc,char** argv)
                     DNAVector dd = dna[c];
                     dd.ReverseComplement();
                 
-                    int start = dd.isize() - matchesRC[x].GetPosition() - pooling_kmer_size;
+                    int start = dd.isize() - matchesRC[x].GetPosition() - config.pooling_kmer_size;
                     DNAVector add;
                 
                     weld.WeldableKmer(add, d, j, dd, start); 
-                    if (add.isize() > 0 && (! IsSimple(add)) && (! SimpleHalves(add)))
+                    if (add.isize() > 0 && (! IsSimple(add, config.MIN_KMER_ENTROPY)) && (! SimpleHalves(add, config.MIN_WELD_ENTROPY, config.MAX_RATIO_INTERNALLY_REPETITIVE)))
                         Add(crossover, add, counter);        
                 
                 
                     weld.WeldableKmer(add, dd, start, d, j);
-                    if (add.isize() > 0 && ! IsSimple(add) && (! SimpleHalves(add)))
+                    if (add.isize() > 0 && ! IsSimple(add, config.MIN_KMER_ENTROPY) && (! SimpleHalves(add, config.MIN_WELD_ENTROPY, config.MAX_RATIO_INTERNALLY_REPETITIVE)))
                         Add(crossover, add, counter);        
                 }
             }
@@ -1391,7 +1390,7 @@ int main(int argc,char** argv)
     
         cerr << "Setting up reads for streaming..." << endl;
         DNAStringStreamFast seq;
-        seq.ReadStream(readString);  //readString is the name of the file containing the reads
+        seq.ReadStream(config.readString);  //readString is the name of the file containing the reads
         
         cerr << "Identifying reads that support welding of iworm contigs..." << endl;
         kmers.AddData(seq);
@@ -1425,10 +1424,10 @@ int main(int argc,char** argv)
             
             int cutoff = 0;
             DNAVector & d = dna[i];
-            if (d.isize() < pooling_kmer_size) {
+            if (d.isize() < config.pooling_kmer_size) {
             
                 if (DEBUG) {
-                    cerr << "ignoring: " << dna.Name(i) << " since less than length: " << pooling_kmer_size << endl;
+                    cerr << "ignoring: " << dna.Name(i) << " since less than length: " << config.pooling_kmer_size << endl;
                 }
                 
                 continue;
@@ -1437,20 +1436,20 @@ int main(int argc,char** argv)
                             
 
             // iterate through kmers of inchworm contig
-            for (int j=0; j<=d.isize()-pooling_kmer_size; j++) {
+            for (int j=0; j<=d.isize()-config.pooling_kmer_size; j++) {
             
                 DNAVector sub;
-                sub.SetToSubOf(d, j, pooling_kmer_size);
+                sub.SetToSubOf(d, j, config.pooling_kmer_size);
             
                 svec<KmerAlignCoreRecord> matchesFW, matchesRC;   
             
                 core.GetMatches(matchesFW, sub);
-                if (!sStrand) {
+                if (!config.sStrand) {
                     sub.ReverseComplement();
                     core.GetMatches(matchesRC, sub);
                 }
             
-                if (IsSimple(sub) && matchesFW.isize() + matchesRC.isize() > 1) {
+				if (IsSimple(sub, config.MIN_KMER_ENTROPY) && matchesFW.isize() + matchesRC.isize() > 1) {
                     if (DEBUG) {
                         cerr << "kmer: " << sub.AsString() << " ignored since either low complex and too many iworm matches"<< endl;
                     }
@@ -1480,9 +1479,9 @@ int main(int argc,char** argv)
                 
     
                     double higher_coverage_val = (coverage > coverage_other) ? coverage : coverage_other;
-                    int minCov = (int) (higher_coverage_val * glue_factor);
-                    if (minCov < min_glue_required) {
-                        minCov = min_glue_required;
+                    int minCov = (int) (higher_coverage_val * config.glue_factor);
+                    if (minCov < config.min_glue_required) {
+                        minCov = config.min_glue_required;
                     }
                 
                     DNAVector & dd = dna[c];        
@@ -1498,7 +1497,7 @@ int main(int argc,char** argv)
                     //cout << "TEST_WELD: " << I << " " << J << " ";
                     string welding_kmer;
                     int welding_kmer_read_count;
-                    if (!bNoWeld 
+                    if (!config.bNoWeld 
                     && 
                         !(weld.Weldable(d, j, dd, start, minCov, welding_kmer, welding_kmer_read_count) 
                       || 
@@ -1512,7 +1511,7 @@ int main(int argc,char** argv)
                         continue;
                     }
                                 
-                    if (IsShadow(d, dd, j, start, pooling_kmer_size) && coverage > 2*coverage_other) {
+                    if (IsShadow(d, dd, j, start, config.pooling_kmer_size) && coverage > 2*coverage_other) {
                         cerr << "Toasting shadow: " << dna.Name(c) << endl;
                 
                         #pragma omp critical
@@ -1520,7 +1519,7 @@ int main(int argc,char** argv)
                     
                         continue;
                
-                    } else if (!IsGoodCoverage(coverage, coverage_other, min_iso_ratio)) {
+                    } else if (!IsGoodCoverage(coverage, coverage_other, config.min_iso_ratio)) {
                         //cerr << "Rejecting fw merge between " << dna.Name(i);
                         //cerr << " and " << dna.Name(c) << endl;
                     
@@ -1536,7 +1535,7 @@ int main(int argc,char** argv)
                         
                     }
                 
-                    if (REPORT_WELDS) {
+                    if (config.REPORT_WELDS) {
                     #pragma omp critical
                         cout << "#Welding: " << dna.Name(i) << " to " << dna.Name(c) 
                              << " with " << welding_kmer << " found in " << welding_kmer_read_count << " reads" << endl;
@@ -1545,7 +1544,7 @@ int main(int argc,char** argv)
 
                 }
 
-                if (sStrand) {
+                if (config.sStrand) {
                     // only doing the forward matches
 
                     if (DEBUG) {
@@ -1576,15 +1575,15 @@ int main(int argc,char** argv)
                     double coverage_other = Coverage(dna.Name(c));
                 
                     double higher_coverage_val = (coverage > coverage_other) ? coverage : coverage_other;
-                    int minCov = (int) (higher_coverage_val * glue_factor);
-                    if (minCov < min_glue_required) {
-                        minCov = min_glue_required;
+                    int minCov = (int) (higher_coverage_val * config.glue_factor);
+                    if (minCov < config.min_glue_required) {
+                        minCov = config.min_glue_required;
                     }
                 
                     DNAVector dd = dna[c];
                     dd.ReverseComplement();  // revcomp a copy of the iworm[c] sequence
                 
-                    int start = dd.isize() - matchesRC[x].GetPosition() - pooling_kmer_size;  // reverse-complement the match coordinate
+                    int start = dd.isize() - matchesRC[x].GetPosition() - config.pooling_kmer_size;  // reverse-complement the match coordinate
 
 
                     if (DEBUG) {
@@ -1595,7 +1594,7 @@ int main(int argc,char** argv)
                 
                     string welding_kmer;
                     int welding_kmer_read_count;
-                    if (!bNoWeld 
+                    if (!config.bNoWeld 
                     && 
                         !(weld.Weldable(d, j, dd, start, minCov, welding_kmer, welding_kmer_read_count) 
                       || 
@@ -1610,7 +1609,7 @@ int main(int argc,char** argv)
                         continue;
                     }
                     
-                    if (IsShadow(d, dd, j, start, pooling_kmer_size) && coverage > 2*coverage_other) {
+                    if (IsShadow(d, dd, j, start, config.pooling_kmer_size) && coverage > 2*coverage_other) {
                         cerr << "Toasting shadow: " << dna.Name(c) << endl;
 
                         #pragma omp critical
@@ -1618,11 +1617,11 @@ int main(int argc,char** argv)
                     
                         continue;
 
-                    } else if (!IsGoodCoverage(coverage, coverage_other, min_iso_ratio)) {
+                    } else if (!IsGoodCoverage(coverage, coverage_other, config.min_iso_ratio)) {
                         // cerr << "Rejecting rc merge between " << dna.Name(i);
                         // cerr << " and " << dna.Name(c) << endl;
                         continue;
-                    } else if (!IsGoodCoverage(coverage, coverage_other, min_iso_ratio)) {
+                    } else if (!IsGoodCoverage(coverage, coverage_other, config.min_iso_ratio)) {
                         // cerr << "Rejecting rc merge between " << dna.Name(i);
                         // cerr << " and " << dna.Name(c) << endl;
                         continue;
@@ -1639,7 +1638,7 @@ int main(int argc,char** argv)
                         
                     }
 
-                    if (REPORT_WELDS) {
+                    if (config.REPORT_WELDS) {
                     #pragma omp critical
                         cout << "#Welding: " << dna.Name(i) << " to " << dna.Name(c) 
                              << " with " << welding_kmer << " found in " << welding_kmer_read_count << " reads" << endl;
@@ -1660,7 +1659,7 @@ int main(int argc,char** argv)
     
     // sl_clustered_pools = sl_cluster_pools(weld_reinforced_iworm_clusters, toasted);
     
-    svec<Pool> clustered_pools = bubble_up_cluster_growth(weld_reinforced_iworm_clusters, toasted);
+	svec<Pool> clustered_pools = bubble_up_cluster_growth(weld_reinforced_iworm_clusters, toasted, config.MAX_CLUSTER_SIZE);
     
     //-----------------------------------------------------------------------------------
     // Generate final output
@@ -1691,7 +1690,7 @@ int main(int argc,char** argv)
             sum_iworm_length += dna[z].isize();
         }
 
-        if (sum_iworm_length < MIN_CONTIG_LENGTH) {
+        if (sum_iworm_length < config.MIN_CONTIG_LENGTH) {
             continue;
         }
         
