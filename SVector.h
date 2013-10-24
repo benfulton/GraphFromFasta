@@ -1,7 +1,7 @@
 #ifndef SVECTOR_H_
 #define SVECTOR_H_
 
-using namespace std;
+//using namespace std;
 
 #include <vector>
 #include <iterator>

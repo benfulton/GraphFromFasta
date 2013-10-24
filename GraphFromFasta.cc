@@ -5,6 +5,8 @@
 #include <map>
 #include <fstream>
 
+#include <assert.h>
+
 #include "CommandLineParser.h"
 #include "DNAVector.h"
 #include "KmerAlignCore.h"
@@ -1206,8 +1208,39 @@ config load_config(int argc,char** argv)
 	return config;
 }
 
+void test()
+{
+	vecDNAVector dna;
+	DNAVector v[5];
+	v[0].SetFromBases("AAGCTCT");
+	v[1].SetFromBases("GTCTGAA");
+	v[2].SetFromBases("ATTCGCA");
+	v[3].SetFromBases("AAGCTCT");
+	v[4].SetFromBases("TCGCACA");
+
+	dna.push_back(v[0]);
+	dna.push_back(v[1]);
+	dna.push_back(v[2]);
+	dna.push_back(v[3]);
+	dna.push_back(v[4]);
+	KmerAlignCore core;
+	core.SetNumTables(2);
+	TranslateBasesToNumberExact trans;
+	trans.SetSize(5);
+	core.SetTranslator(&trans);
+	assert( core.Table().size() == 1024);
+	core.AddData(dna);
+	int b = trans.BasesToNumber(v[0],0);
+	int c = trans.BasesToNumber(v[4],0);
+	assert( core.Table()[b].GetData().size() == 2);
+	assert( core.Table()[c].GetData().size() == 2);
+	assert( core.Table()[183].GetData().size() == 1);
+}
+
 int main(int argc,char** argv)
 {
+	test();
+
     cerr << "-----------------------------------------" << endl
          << "--- Chrysalis: GraphFromFasta -----------" << endl
          << "-- (cluster related inchworm contigs) ---" << endl
@@ -1244,23 +1277,14 @@ int main(int argc,char** argv)
     dna.Read(config.aString, false, false, true, 1000000);
     cerr << "done!" << endl;   
         
-    NonRedKmerTable kmers(config.welding_kmer_size);
-    Welder weld(config.pooling_kmer_size, config.welding_kmer_size); // decides if read support exists to weld two inchworm contigs together into the same component.
-
-
-    int iworm_counter = 0;
-    int total_iworm_contigs = dna.size();
-    
-    
     map<int,Pool> weld_reinforced_iworm_clusters;
-    map<int,bool> toasted;
     
     if (config.scaffolding_filename.length() > 0) {
         // add scaffolding info to clusters
         add_scaffolds_to_clusters(weld_reinforced_iworm_clusters, config.scaffolding_filename, dna, config.min_glue_required, config.glue_factor);
     }
 
-    
+    map<int,bool> toasted;    
     if (! config.bNoWeld) { // make this a function
         
         
@@ -1287,10 +1311,9 @@ int main(int argc,char** argv)
         
         double start_time = omp_get_wtime();
         
-        iworm_counter = 0;
+        int iworm_counter = 0;
 		vecDNAVector crossover;
     
-        
         #pragma omp parallel for schedule(dynamic, schedule_chunksize) private(j)
         for (int i=0; i<dna.isize(); i++) {
             DNAVector & d = dna[i]; // inchworm contig [i]
@@ -1382,11 +1405,8 @@ int main(int argc,char** argv)
         //-------------------------------------------------------------------------
         
         
-        //cerr << "Setting up/sorting structure." << endl;
+	    NonRedKmerTable kmers(config.welding_kmer_size);
         kmers.SetUp(crossover);
-        //cerr << "done setting up sorting structure." << endl;
-        
-
     
         cerr << "Setting up reads for streaming..." << endl;
         DNAStringStreamFast seq;

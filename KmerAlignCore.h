@@ -23,15 +23,7 @@ class TranslateBasesToNumber
   
   virtual int GetRange() const {return m_range;}
   virtual int GetSize() const = 0;
-  virtual int GetBoundValue() const {
-    int i;
-    int m = 1;
-    for (i=0; i<m_range; i++) {
-      m = (m << 2);
-    }
-    //cout << "Table size: " << m << endl;
-    return m;
-  }
+  virtual int GetBoundValue() const { return 1 << (2*m_range); }
   
  protected:
   int m_range;
@@ -207,9 +199,7 @@ class KmerAlignCoreRecord
 class KmerAlignCoreRecordStore
 {
  public:
-  KmerAlignCoreRecordStore() {}
-
-  int GetNumRecords() {return m_data.isize();}
+  int GetNumRecords() {return m_data.size();}
 
   const KmerAlignCoreRecord & GetRecord(int i) const {return m_data[i];}
   
@@ -224,42 +214,23 @@ class KmerAlignCoreRecordStore
     tmp.Set(contig, pos, score);
   }
 
-  void Sort() {::Sort(m_data);}
-  void UniqueSort() {::UniqueSort(m_data);}
+  void Sort() {sort(m_data.begin(), m_data.end());}
+  void UniqueSort();// {::UniqueSort(m_data);}
   
   void Resize(int n) {m_data.resize(n);}
-  int GetSize() const {return m_data.isize();}
+//  int GetSize() const {return m_data.isize();}
   const KmerAlignCoreRecord & Get(int i) const {return m_data[i];}
 
-  const svec<KmerAlignCoreRecord> & GetData() const {return m_data;}
+  const std::vector<KmerAlignCoreRecord> & GetData() const {return m_data;}
 
 
  private:
-  svec<KmerAlignCoreRecord> m_data;
+  std::vector<KmerAlignCoreRecord> m_data;
 };
 
 
 
-
-class KmerAlignCoreRecordStoreTable
-{
- public:
-  void SetSize(int i) {
-    m_table.resize(i);
-  }
-
-  int GetSize() const {return m_table.isize();}
-
-  KmerAlignCoreRecordStore & operator[] (int i) {return m_table[i];}
-  const KmerAlignCoreRecordStore & operator[] (int i) const {return m_table[i];}
-
-  
-
- private:
-  svec<KmerAlignCoreRecordStore> m_table;
-};
-
-
+typedef std::vector<KmerAlignCoreRecordStore> KmerAlignCoreRecordStoreTable;
 
 class KmerAlignCore
 {
@@ -279,12 +250,12 @@ public:
 
   void SetTranslator(TranslateBasesToNumber * p) {
     m_pTrans = p;   
-    m_table.SetSize(m_pTrans->GetBoundValue());
+    m_table.resize(m_pTrans->GetBoundValue());
   }
 
-  bool GetMatches(svec<KmerAlignCoreRecord> & matches, const DNAVector & b, int start = 0);
+  bool GetMatches(std::vector<KmerAlignCoreRecord> & matches, const DNAVector & b, int start = 0);
 
-  const svec<KmerAlignCoreRecord> & GetMatchesDirectly(const DNAVector & b, int start = 0);
+  const std::vector<KmerAlignCoreRecord> & GetMatchesDirectly(const DNAVector & b, int start = 0);
 
   void SetNumTables(int i) {
     m_numTables = i;
@@ -299,10 +270,11 @@ public:
 
   void SetLAMaxFreq(int i) {m_lookAheadMaxFreq = i;}
 
+  const KmerAlignCoreRecordStoreTable& Table() { return m_table; }
 private:
-  void MergeSortFilter(svec<KmerAlignCoreRecord> & result,
-		       const svec<KmerAlignCoreRecord> & one,
-		       const svec<KmerAlignCoreRecord> & two);
+  void MergeSortFilter(std::vector<KmerAlignCoreRecord> & result,
+		       const std::vector<KmerAlignCoreRecord> & one,
+		       const std::vector<KmerAlignCoreRecord> & two);
 
   int m_numTables;
   int m_lookAhead;
