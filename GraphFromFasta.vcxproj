@@ -77,6 +77,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AACodons.cc" />
+    <ClCompile Include="DNAUtil.cc" />
     <ClCompile Include="DNAVector.cc" />
     <ClCompile Include="ErrorHandling.cc" />
     <ClCompile Include="FileParser.cc" />
@@ -89,6 +90,7 @@
   <ItemGroup>
     <ClInclude Include="AACodons.h" />
     <ClInclude Include="DeBruijnGraph.h" />
+    <ClInclude Include="DNAUtil.h" />
     <ClInclude Include="DNAVector.h" />
     <ClInclude Include="ErrorHandling.h" />
     <ClInclude Include="FileParser.h" />

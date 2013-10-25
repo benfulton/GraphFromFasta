@@ -18,6 +18,7 @@
 #include <omp.h>
 #include "DeBruijnGraph.h"
 #include "sequenceUtil.h"
+#include "DNAUtil.h"
 
 #undef DEBUG
 
@@ -230,59 +231,6 @@ bool is_simple_repeat(const DNAVector& kmer, float MAX_RATIO_INTERNALLY_REPETITI
 
 
 
-// used to determine complexity of a kmer
-float compute_entropy(const DNAVector & kmer) {
-    
-    map<char,int> char_map;
-    
-    for (unsigned int i = 0; i < (unsigned int)kmer.isize(); i++) {
-        
-        char c = kmer[i];
-        char_map[c]++;
-    }
-    
-    float entropy = 0;
-    
-    char nucs[] = { 'G', 'A', 'T', 'C' };
-    
-    for (unsigned int i = 0; i < 4; i++) {
-        
-        char nuc = nucs[i];
-        
-        int count = char_map[nuc];
-        
-        float prob = (float)count / kmer.isize();
-        
-        if (prob > 0) {
-            float val = prob * log(1/prob)/log((float)2);
-            entropy += val;
-        }
-    }
-    
-    return(entropy);
-}
-
-bool IsSimple(const DNAVector & d, float MIN_KMER_ENTROPY) 
-{
-   
-    // compute entropy
-    float e = compute_entropy(d);
-
-    //cout << d.AsString() << " has entropy: " << e << endl;
-    if (e < MIN_KMER_ENTROPY) {
-        
-        //if (DEBUG) 
-        //    cerr << "-Sequence declared low complexity: " << d.AsString() << " with entropy " << e << endl;
-        
-        return(true);
-    }
-    else {
-        return false;
-    }
-
-}
-
-
 bool SimpleHalves(const DNAVector & d, float MIN_WELD_ENTROPY, float MAX_RATIO_INTERNALLY_REPETITIVE) {
     int len = d.isize();
     int mid_pos = int(len/2);
@@ -305,14 +253,14 @@ bool SimpleHalves(const DNAVector & d, float MIN_WELD_ENTROPY, float MAX_RATIO_I
     if (DEBUG) {
         #pragma omp critical
         {
-            cout << "## Left half: " << left.AsString() << ", en: " << compute_entropy(left);
-            cout << "\tRight half: " << right.AsString() << ", en: " << compute_entropy(right) << endl;
+			cout << "## Left half: " << left.AsString() << ", en: " << compute_entropy(left.AsString());
+			cout << "\tRight half: " << right.AsString() << ", en: " << compute_entropy(right.AsString()) << endl;
         }
     }
     
-    return (compute_entropy(left) < MIN_WELD_ENTROPY 
+	return (compute_entropy(left.AsString()) < MIN_WELD_ENTROPY 
             || 
-            compute_entropy(right) < MIN_WELD_ENTROPY
+			compute_entropy(right.AsString()) < MIN_WELD_ENTROPY
             ||
             is_simple_repeat(left, MAX_RATIO_INTERNALLY_REPETITIVE)
             ||
@@ -1208,39 +1156,8 @@ config load_config(int argc,char** argv)
 	return config;
 }
 
-void test()
-{
-	vecDNAVector dna;
-	DNAVector v[5];
-	v[0].SetFromBases("AAGCTCT");
-	v[1].SetFromBases("GTCTGAA");
-	v[2].SetFromBases("ATTCGCA");
-	v[3].SetFromBases("AAGCTCT");
-	v[4].SetFromBases("TCGCACA");
-
-	dna.push_back(v[0]);
-	dna.push_back(v[1]);
-	dna.push_back(v[2]);
-	dna.push_back(v[3]);
-	dna.push_back(v[4]);
-	KmerAlignCore core;
-	core.SetNumTables(2);
-	TranslateBasesToNumberExact trans;
-	trans.SetSize(5);
-	core.SetTranslator(&trans);
-	assert( core.Table().size() == 1024);
-	core.AddData(dna);
-	int b = trans.BasesToNumber(v[0],0);
-	int c = trans.BasesToNumber(v[4],0);
-	assert( core.Table()[b].GetData().size() == 2);
-	assert( core.Table()[c].GetData().size() == 2);
-	assert( core.Table()[183].GetData().size() == 1);
-}
-
 int main(int argc,char** argv)
 {
-	test();
-
     cerr << "-----------------------------------------" << endl
          << "--- Chrysalis: GraphFromFasta -----------" << endl
          << "-- (cluster related inchworm contigs) ---" << endl
@@ -1330,7 +1247,7 @@ int main(int argc,char** argv)
                 DNAVector sub; // a kmer
                 sub.SetToSubOf(d, j, config.pooling_kmer_size);
             
-				if (IsSimple(sub, config.MIN_KMER_ENTROPY))
+				if (IsSimple(sub.AsString(), config.MIN_KMER_ENTROPY))
                     continue; // ignore kmers that are low complexity
             
 
@@ -1361,11 +1278,11 @@ int main(int argc,char** argv)
                     DNAVector add;
                 
                     weld.WeldableKmer(add, d, j, dd, start);
-					if (add.isize() > 0 && ! IsSimple(add, config.MIN_KMER_ENTROPY) && (! SimpleHalves(add, config.MIN_WELD_ENTROPY, config.MAX_RATIO_INTERNALLY_REPETITIVE) )) {
+					if (add.isize() > 0 && ! IsSimple(add.AsString(), config.MIN_KMER_ENTROPY) && (! SimpleHalves(add, config.MIN_WELD_ENTROPY, config.MAX_RATIO_INTERNALLY_REPETITIVE) )) {
                         Add(crossover, add, counter);      
                     }
                     weld.WeldableKmer(add, dd, start, d, j);
-                    if (add.isize() > 0 && (! IsSimple(add, config.MIN_KMER_ENTROPY)) && (! SimpleHalves(add, config.MIN_WELD_ENTROPY, config.MAX_RATIO_INTERNALLY_REPETITIVE) )) {
+					if (add.isize() > 0 && (! IsSimple(add.AsString(), config.MIN_KMER_ENTROPY)) && (! SimpleHalves(add, config.MIN_WELD_ENTROPY, config.MAX_RATIO_INTERNALLY_REPETITIVE) )) {
                         Add(crossover, add, counter);
                     }
                 }
@@ -1380,12 +1297,12 @@ int main(int argc,char** argv)
                     DNAVector add;
                 
                     weld.WeldableKmer(add, d, j, dd, start); 
-                    if (add.isize() > 0 && (! IsSimple(add, config.MIN_KMER_ENTROPY)) && (! SimpleHalves(add, config.MIN_WELD_ENTROPY, config.MAX_RATIO_INTERNALLY_REPETITIVE)))
+					if (add.isize() > 0 && (! IsSimple(add.AsString(), config.MIN_KMER_ENTROPY)) && (! SimpleHalves(add, config.MIN_WELD_ENTROPY, config.MAX_RATIO_INTERNALLY_REPETITIVE)))
                         Add(crossover, add, counter);        
                 
                 
                     weld.WeldableKmer(add, dd, start, d, j);
-                    if (add.isize() > 0 && ! IsSimple(add, config.MIN_KMER_ENTROPY) && (! SimpleHalves(add, config.MIN_WELD_ENTROPY, config.MAX_RATIO_INTERNALLY_REPETITIVE)))
+					if (add.isize() > 0 && ! IsSimple(add.AsString(), config.MIN_KMER_ENTROPY) && (! SimpleHalves(add, config.MIN_WELD_ENTROPY, config.MAX_RATIO_INTERNALLY_REPETITIVE)))
                         Add(crossover, add, counter);        
                 }
             }
@@ -1469,7 +1386,7 @@ int main(int argc,char** argv)
                     core.GetMatches(matchesRC, sub);
                 }
             
-				if (IsSimple(sub, config.MIN_KMER_ENTROPY) && matchesFW.isize() + matchesRC.isize() > 1) {
+				if (IsSimple(sub.AsString(), config.MIN_KMER_ENTROPY) && matchesFW.isize() + matchesRC.isize() > 1) {
                     if (DEBUG) {
                         cerr << "kmer: " << sub.AsString() << " ignored since either low complex and too many iworm matches"<< endl;
                     }

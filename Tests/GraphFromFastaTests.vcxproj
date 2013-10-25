@@ -82,10 +82,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\AACodons.cc" />
+    <ClCompile Include="..\DNAUtil.cc" />
     <ClCompile Include="..\DNAVector.cc" />
     <ClCompile Include="..\ErrorHandling.cc" />
     <ClCompile Include="..\FileParser.cc" />
+    <ClCompile Include="..\KmerAlignCore.cc" />
     <ClCompile Include="..\mutil.cc" />
+    <ClCompile Include="..\NonRedKmerTable.cc" />
     <ClCompile Include="..\StringUtil.cc" />
     <ClCompile Include="GraphFromFastaTests.cpp" />
   </ItemGroup>
