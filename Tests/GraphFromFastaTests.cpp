@@ -60,3 +60,29 @@ TEST(DNAUtilTest, compute_entropy)
 	v.SetFromBases("AAAA");
 	ASSERT_FLOAT_EQ( 0, compute_entropy(v.AsString()));
 }
+
+TEST(DNAVector, SetToSubOf)
+{
+	DNAVector src;
+	src.SetFromBases("AAGCTCT");
+	int len = 3;
+	int start = 2;
+	DNAVector sub; // a kmer
+	sub.SetToSubOf(src, start, len);
+	EXPECT_EQ( src.AsString().substr(start, len), sub.AsString() );
+}
+
+TEST(TranslateBasesToNumberExact, BaseToNumber)
+{
+	DNAVector src;
+	TranslateBasesToNumberExact tr; 
+	
+	src.SetFromBases("A");
+	tr.SetSize(1);
+	EXPECT_EQ(0, tr.BasesToNumber( src, 0));
+	
+	src.SetFromBases("AAGCTCT");
+	tr.SetSize(5);
+	EXPECT_EQ(864, tr.BasesToNumber( src, 0));
+}
+
