@@ -39,15 +39,15 @@ TEST(vecDNAVectorTest, AddData)
 	KmerAlignCore core;
 	core.SetNumTables(2);
 	TranslateBasesToNumberExact trans;
-	trans.SetSize(5);
+//	trans.SetSize(5);
 	core.SetTranslator(&trans);
-	assert( core.Table().size() == 1024);
+	//assert( core.Table().size() == 1024);
 	core.AddData(dna);
 	int b = trans.BasesToNumber(v[0],0);
 	int c = trans.BasesToNumber(v[4],0);
-	EXPECT_EQ( 2, core.Table()[b].GetData().size());
-	EXPECT_EQ( 2, core.Table()[c].GetData().size());
-	EXPECT_EQ( 1, core.Table()[183].GetData().size());
+	EXPECT_EQ( 2, core.NumberOfKmersWithHash(b));
+	EXPECT_EQ( 2, core.NumberOfKmersWithHash(c));
+	EXPECT_EQ( 1, core.NumberOfKmersWithHash(183));
 }
 
 TEST(DNAUtilTest, compute_entropy) 

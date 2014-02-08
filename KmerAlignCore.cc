@@ -2,25 +2,11 @@
 //#define NDEBUG
 #endif
 
-
+#include <algorithm>
 #include "KmerAlignCore.h"
 
-KmerAlignCore::KmerAlignCore() 
-{
-    m_numTables = 2;    
-    m_pTrans = NULL;
-    m_lookAhead = 0;
-    m_lookAheadMaxFreq = 50000;
-    
-    m_max12 = 0x7FFFFFFF;
-}
-
-void KmerAlignCore::AddData(const vecDNAVector & bases)
-{
-    vecNumVector dummy;
-    dummy.resize(bases.size());
-    AddData(bases, dummy, 1);
-}
+typedef std::vector<KmerAlignCoreRecord> KmerAlignCoreRecordStore;
+typedef std::vector<KmerAlignCoreRecordStore> KmerAlignCoreRecordStoreTable;
 
 
 bool IsRepeat(const NumVector & t, int i, int size, int min)
@@ -43,7 +29,7 @@ bool IsRepeat(const NumVector & t, int i, int size, int min)
     }
 }
 
-void KmerAlignCoreRecordStore::UniqueSort()
+void UniqueSort(vector<KmerAlignCoreRecord>& m_data)
 {
   sort(m_data.begin(), m_data.end());
 
@@ -59,25 +45,33 @@ void KmerAlignCoreRecordStore::UniqueSort()
   m_data.resize(k);
 }
 
-void KmerAlignCore::AddData(const vecDNAVector & bases, const vecNumVector & tags, int min)
+KmerAlignCore::KmerAlignCore() 
+{
+    m_numTables = 2;    
+    m_pTrans = NULL;
+    m_lookAhead = 0;
+    m_lookAheadMaxFreq = 50000;
+    
+    m_max12 = 0x7FFFFFFF;
+}
+
+void KmerAlignCore::AddData(const vecDNAVector & reads)
 {
     cerr << "assigning k-mers..." << endl;
-    int size = m_pTrans->GetSize();
 
-    for (int j=0; j<bases.size(); j++) {
-        const DNAVector & b = bases[j];
-        const NumVector & t = tags[j];
-        int k=0;
-        if (j % 1000 == 0 || j == bases.size()-1)
+    for (int j=0; j<reads.size(); j++) {
+        const DNAVector & read = reads[j];
+        if (j % 1000 == 0 || j == reads.size()-1)
             cerr << "\rKmerAlignCore- Contigs: " << j << "   ";
         
-        while (k <= b.size()-size) {
-            if (!IsRepeat(t, k, size, min)) {
-                int n = m_pTrans->BasesToNumber(b, k);
-                if (n >= 0) {
-                    m_table[n].Add(j, k);
-                }
-            }      
+		// for each kmer in the read 
+        int k=0;
+        while (k <= read.size()-KMER_SIZE) {
+            int hash_value = m_pTrans->BasesToNumber(read, k);
+            if (hash_value >= 0) {
+				// j,k are the read index and the kmer index
+                m_table[hash_value].push_back(KmerAlignCoreRecord(j,k));
+            }
             k++;
         }
     }
@@ -86,156 +80,118 @@ void KmerAlignCore::AddData(const vecDNAVector & bases, const vecNumVector & tag
     
 }
 
-void KmerAlignCore::AddData(const DNAVector & b, int contig, int offset, bool bSort)
+void vec_sort( pair<const int, vector<KmerAlignCoreRecord>>& s )
 {
-    int i, j, k;
-    
-    int size = m_pTrans->GetSize();
-    k = 0;
-    
-    while (k < (int)b.size()-size) {
-        KmerAlignCoreRecordStoreTable & t = m_table;
-        int n = m_pTrans->BasesToNumber(b, k);
-        if (n >= 0) {
-            KmerAlignCoreRecordStore & s = t[n];
-            s.Add(contig, k+offset);
-        }
-        k++;      
-    }
-    if (bSort)
-        SortAll();
+	sort(s.second.begin(), s.second.end());
 }
 
 void KmerAlignCore::SortAll()
 {
-    int i, j;
-    KmerAlignCoreRecordStoreTable & t = m_table;
-    for (j=0; j<t.size(); j++) {
-        KmerAlignCoreRecordStore & s = t[j];
-        s.Sort();    
-    }
+	for_each( m_table.begin(), m_table.end(), vec_sort);
 }
-
-const vector<KmerAlignCoreRecord> & KmerAlignCore::GetMatchesDirectly(const DNAVector & b, int start)
-{
-    int size = m_pTrans->GetSize();
-    int i, j;
-    
-    int n = m_pTrans->BasesToNumber(b, start);
-    
-    if (n < 0) {
-        static svec<KmerAlignCoreRecord> dummy;
-        return dummy;
-    }
-    
-    KmerAlignCoreRecordStore & s = m_table[n];   
-    return s.GetData();
-}
-
 
 bool KmerAlignCore::GetMatches(vector<KmerAlignCoreRecord> & matches, const DNAVector & b, int start)
 {
-    int size = m_pTrans->GetSize();
-    int i, j, k, l;
-    k = start;
-    
-    if (start + m_numTables * size > (int)b.size()) {
-        cerr << "Error: sequence length=" << b.size() << " and k-kmer end is " << start + m_numTables * size << endl; 
-        return false;
-    } 
-    
-    
-    //cout << "Start position: " << start << endl;
-    
-    KmerAlignCoreRecordStoreTable hits;
-    
-    hits.resize(m_numTables);
-    
-    for (i=0; i<m_numTables; i++) {
-        KmerAlignCoreRecordStoreTable & t = m_table;
-        KmerAlignCoreRecordStore & r = hits[i];
-        
-        if (m_lookAhead == 0) {
-            int n = m_pTrans->BasesToNumber(b, k + i * size);
-            
-            if (n >= 0) {
-                KmerAlignCoreRecordStore & s = t[n];   
-                if (s.GetNumRecords() > m_max12) {
-                    matches.clear();
-                    return false;
-                }
-                
-                // Pre-size it!
-                r.Resize(s.GetNumRecords());
-                int count = 0;
-                //cout << "size=" << s.GetNumRecords() << endl;
-                
-                for (j=0; j<s.GetNumRecords(); j++) {
-                    //cout << "Adding single match, pos=" << s.GetRecord(j).GetPosition() << endl;
-                    r.Add(s.GetRecord(j).GetContig(), s.GetRecord(j).GetPosition() - i * size, count);
-                    //cout << "Done" << endl;
-                    count++;
-                    //r.Add(s.GetRecord(j).GetContig(), s.GetRecord(j).GetPosition() - i * size);
-                }
-            }
-        } else {
-            
-            int penalty = 0;
-            for (l=0; l<m_lookAhead; l++) {
-                if (k + i * size + l + size > (int)b.size())
-                    break;
-                //cout << "n=" << k + i * size + l << endl;
-                int n = m_pTrans->BasesToNumber(b, k + i * size + l);
-                
-                if (n > 0) {
-                    KmerAlignCoreRecordStore & s = t[n];   
-                    
-                    int count = r.GetNumRecords();
-                    if (l > 0)
-                        penalty = 1;
-                    
-                    if (l > 0 && count > m_lookAheadMaxFreq) {
-                        //cout << "***** Count: " << count << endl;
-                        continue;
-                    }
-                    r.Resize(count + s.GetNumRecords());
-                    for (j=0; j<s.GetNumRecords(); j++) {
-                        //cout << "Adding single match, pos=" << s.GetRecord(j).GetPosition() << endl;
-                        r.Add(s.GetRecord(j).GetContig(), s.GetRecord(j).GetPosition() - i * size - l, count, penalty);
-                        count++;
-                        //r.Add(s.GetRecord(j).GetContig(), s.GetRecord(j).GetPosition() - i * size - l);
-                    }
-                }
-                //cout << "Before sort: " << r.GetSize() << endl;
-                r.UniqueSort();      
-                //cout << "After sort:  " << r.GetSize() << endl;
-                //for (l=0; l<r.GetSize(); l++) {
-                //const KmerAlignCoreRecord & record = r.Get(l);
-                //cout << "   c" << record.GetContig() << " @" << record.GetPosition() << endl;
-                //}
-            }
-        }
-    }
-    
-    matches.clear();
-    vector<KmerAlignCoreRecord> tmp;
-    
-    if (hits.empty())
-        return false;
-    
-    //cout << "Merging, hits size=" << hits.GetSize() << endl;
-    tmp = hits[0].GetData();
-    for (i=1; i<m_numTables; i++) {
-        MergeSortFilter(matches, tmp, hits[i].GetData());
-        tmp = matches;
-        //cout << "Matches remaining: " << matches.isize() << endl;
-    }
-    
-    if (m_numTables == 1)
-        matches = tmp;
-    //cout << "All done!" << endl;
-    
-    return (matches.size() > 0);
+	int size = m_pTrans->GetSize();
+	int i, j, k, l;
+	k = start;
+
+	if (start + m_numTables * size > (int)b.size()) {
+		cerr << "Error: sequence length=" << b.size() << " and k-kmer end is " << start + m_numTables * size << endl; 
+		return false;
+	} 
+
+
+	//cout << "Start position: " << start << endl;
+
+	KmerAlignCoreRecordStoreTable hits;
+
+	hits.resize(m_numTables);
+
+	for (i=0; i<m_numTables; i++) {
+		KmerAlignCoreRecordStore & r = hits[i];
+
+		if (m_lookAhead == 0) {
+			int n = m_pTrans->BasesToNumber(b, k + i * size);
+
+			if (n >= 0) {
+				KmerAlignCoreRecordStore & s = m_table[n];   
+				if (s.size() > m_max12) {
+					matches.clear();
+					return false;
+				}
+
+				// Pre-size it!
+				r.reserve(s.size());
+				int count = 0;
+				//cout << "size=" << s.GetNumRecords() << endl;
+
+				for (j=0; j<s.size(); j++) {
+					//cout << "Adding single match, pos=" << s.GetRecord(j).GetPosition() << endl;
+					KmerAlignCoreRecord const& record = s[j];
+					r.push_back(KmerAlignCoreRecord(record.GetContig(), record.GetPosition() - i * size, count));
+					//cout << "Done" << endl;
+					count++;
+					//r.Add(s.GetRecord(j).GetContig(), s.GetRecord(j).GetPosition() - i * size);
+				}
+			}
+		} else {
+
+			int penalty = 0;
+			for (l=0; l<m_lookAhead; l++) {
+				if (k + i * size + l + size > (int)b.size())
+					break;
+				//cout << "n=" << k + i * size + l << endl;
+				int n = m_pTrans->BasesToNumber(b, k + i * size + l);
+
+				if (n > 0) {
+					KmerAlignCoreRecordStore & s = m_table[n];   
+
+					int count = r.size();
+					if (l > 0)
+						penalty = 1;
+
+					if (l > 0 && count > m_lookAheadMaxFreq) {
+						//cout << "***** Count: " << count << endl;
+						continue;
+					}
+					r.resize(count + s.size());
+					for (j=0; j<s.size(); j++) {
+						//cout << "Adding single match, pos=" << s.GetRecord(j).GetPosition() << endl;
+						KmerAlignCoreRecord const& record = s[j];
+						r[count] = KmerAlignCoreRecord(record.GetContig(), record.GetPosition() - i * size - l, penalty);
+						count++;
+						//r.Add(s.GetRecord(j).GetContig(), s.GetRecord(j).GetPosition() - i * size - l);
+					}
+				}
+				//cout << "Before sort: " << r.GetSize() << endl;
+				UniqueSort(r);      
+				//cout << "After sort:  " << r.GetSize() << endl;
+				//for (l=0; l<r.GetSize(); l++) {
+				//const KmerAlignCoreRecord & record = r.Get(l);
+				//cout << "   c" << record.GetContig() << " @" << record.GetPosition() << endl;
+				//}
+			}
+		}
+	}
+
+	matches.clear();
+	if (hits.empty())
+		return false;
+
+	//cout << "Merging, hits size=" << hits.GetSize() << endl;
+	vector<KmerAlignCoreRecord>& tmp = hits[0];
+	for (i=1; i<m_numTables; i++) {
+		MergeSortFilter(matches, tmp, hits[i]);
+		tmp = matches;
+		//cout << "Matches remaining: " << matches.isize() << endl;
+	}
+
+	if (m_numTables == 1)
+		matches = tmp;
+	//cout << "All done!" << endl;
+
+	return (matches.size() > 0);
 }
 
 void KmerAlignCore::MergeSortFilter(vector<KmerAlignCoreRecord> & result,
@@ -272,3 +228,4 @@ void KmerAlignCore::MergeSortFilter(vector<KmerAlignCoreRecord> & result,
 
 		result.resize(k);
 }
+

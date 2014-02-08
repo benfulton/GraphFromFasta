@@ -1209,9 +1209,9 @@ int main(int argc,char** argv)
         // decode inchworm contigs into kmer composition
         KmerAlignCore core;
         core.SetNumTables(2);
-        TranslateBasesToNumberExact trans;
-        core.SetTranslator(&trans);
-        core.AddData(dna);
+//        TranslateBasesToNumberExact trans;
+//        core.SetTranslator(&trans);
+		core.AddData(dna);
         core.SortAll();
             
         cerr << "Phase 1: Collecting candidate weldmers between iworm contig pairs sharing k-1mers" << endl;
