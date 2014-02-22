@@ -234,14 +234,18 @@ class DNAVector
 
   void resize(int n) {
     m_data.resize(n, 0);
+#ifdef STORE_QUALITY
     if (m_qual.isize() > 0)
       m_qual.resize(n, 0);
+#endif
   }
 
   void resize(int n, char c) {
     m_data.resize(n, c);
+#ifdef STORE_QUALITY
     if (m_qual.isize() > 0)
       m_qual.resize(n, 0);
+#endif
   }
 
   //void Compact();
@@ -258,7 +262,7 @@ class DNAVector
   char & operator [] (int i) {
     return m_data[i];
   }
-
+#ifdef STORE_QUALITY
   int Qual(int i) const {
     if (m_qual.isize() == 0)
       return 0;
@@ -266,6 +270,7 @@ class DNAVector
   }
 
   int QualSize() const {return m_qual.isize();}
+#endif
 
   void Set(int i, char c) {
     m_data[i] = c;
@@ -281,12 +286,13 @@ class DNAVector
   int isize() const {return m_data.isize();}
   long long lsize() const {return m_data.lsize();}
   
+#ifdef STORE_QUALITY
   void SetQual(int i, int score) {
     if (m_qual.isize() == 0)
       m_qual.resize(m_data.isize(), 0);
     m_qual[i] = score;
   }
-
+#endif
 
   void Write(FILE * p) const;
   void Write(ostream &s) const;
@@ -308,7 +314,9 @@ class DNAVector
 
   void clear() {
     m_data.clear();
+#ifdef STORE_QUALITY
     m_qual.clear();
+#endif
   }
 
   bool operator == (const DNAVector & d) const {
@@ -391,7 +399,9 @@ class DNAVector
 
  private:
   svec<char> m_data;
+#ifdef STORE_QUALITY
   svec<int> m_qual;
+#endif
 };
 
 
@@ -484,7 +494,9 @@ class vecDNAVector
 
 
   void Write(const string & fileName, bool bSkipEmpty = false) const;
+#ifdef STORE_QUALITY
   void WriteQuals(const string & fileName) const;
+#endif
   int Read(const string & fileName, bool bProteins = false, bool shortName = false, bool allUpper = true, int bigChunk = 200000000);
   void Read(const string & fileName, svec<string> & names);
   /* ReadPartial

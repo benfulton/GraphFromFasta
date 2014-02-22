@@ -248,13 +248,14 @@ void DNAVector::SetToSubOf(const DNAVector & v, int start, int len)
   for (i=start; i<start+len; i++)
     m_data[i-start] = v[i];
 
+#ifdef STORE_QUALITY
   if (v.QualSize() > 0) {
     m_qual.resize(len);
     for (i=start; i<start+len; i++)
       m_qual[i-start] = v.Qual(i);
     
   }
-
+#endif
 }
 
 
@@ -302,6 +303,7 @@ void DNAVector::ReverseComplement() {
     
   }
 
+#ifdef STORE_QUALITY
   if (m_qual.isize() > 0) {
     n = m_data.isize();
     i = 0;
@@ -319,7 +321,7 @@ void DNAVector::ReverseComplement() {
     
     }
   }
-
+#endif
 
 }
 
@@ -408,6 +410,7 @@ void DNAVector::WriteOneLine(ostream &s) const
 }
 
 
+#ifdef STORE_QUALITY
 
 void DNAVector::WriteQual(ostream &s) const
 {
@@ -430,7 +433,7 @@ void DNAVector::WriteQual(FILE * p) const
   fprintf(p, "\n");;
  
 }
-
+#endif
 
 
 bool DNAVector::Append(const DNAVector & d, int min, int max, double ident)
@@ -804,6 +807,7 @@ void vecDNAVector::Write(const string & fileName, bool bSkipEmpty) const
   }
   fclose(p);
 }
+#ifdef STORE_QUALITY
 void vecDNAVector::WriteQuals(const string & fileName) const
 {
   FILE * p = fopen(fileName.c_str(), "w");
@@ -814,9 +818,9 @@ void vecDNAVector::WriteQuals(const string & fileName) const
   }
   fclose(p);
 }
+#endif
 
-
-
+#ifdef STORE_QUALITY
 void vecDNAVector::ReadQuals(const string & fileName)
 {
   if (m_data.isize() == 0) {
@@ -858,7 +862,7 @@ void vecDNAVector::ReadQuals(const string & fileName)
     }
   }
 }
-
+#endif
 
 
 // Half-way efficient implementation...?
