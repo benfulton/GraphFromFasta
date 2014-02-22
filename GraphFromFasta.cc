@@ -19,6 +19,8 @@
 #include "DeBruijnGraph.h"
 #include "sequenceUtil.h"
 #include "DNAUtil.h"
+#include "Welder.h"
+#include "config.h"
 
 #undef DEBUG
 
@@ -390,114 +392,6 @@ bool IsGoodCoverage(double a, double b, double min_iso_ratio)
 }
 
 
-
-class Welder
-{
-public:
-    Welder(int k, int kk) {
-        m_k = k;
-        m_kk = kk;
-        m_pTab = NULL;
-    }
-    
-    void SetTable(NonRedKmerTable * p) {
-        m_pTab = p;
-    }
-    
-
-    // constructs the required weldable kmer from two contigs a,b and positions one and two
-    void WeldableKmer(DNAVector & out, 
-                      const DNAVector & a, int one, 
-                      const DNAVector & b, int two) 
-    {
-        out.resize(m_kk);
-        int flank = (m_kk - m_k)/2;
-        
-        int startA = one-flank;
-        int stopA = one+m_k;
-        int startB = two+m_k;
-        int stopB = startB + flank;
-        
-        if (DEBUG) 
-            cerr << "weldableKmer(" << startA << "," << stopA << "); (" << startB << "," << stopB << ")" << endl;
-        
-
-        if (startA < 0 || stopB >= b.isize()) {
-            out.resize(0);
-            if (DEBUG) 
-                cerr << "range out of bounds" << endl;
-            return;
-        }
-        
-        int i;
-        int j = 0;
-        for (i=startA; i<stopA; i++) {
-            out[j] = a[i];
-            j++;
-        }
-        for (i=startB; i<stopB; i++) {
-            out[j] = b[i];
-            j++;
-        }
-        
-        if (DEBUG)
-            cerr << "\tweld candidate: " << out.AsString() << endl;
-
-    }
-    
-    
-    bool Weldable(const DNAVector & a, int one, const DNAVector & b, int two, int thresh, string& welding_kmer, int& weldable_kmer_read_count) 
-    {
-        int i;
-        DNAVector d; // stores the required weldabler kmer of length kk
-        WeldableKmer(d, a, one, b, two); // constructs teh weldable kmer, stores in (d)
-        if (d.isize() == 0)
-            return false;
-        
-        
-        int count = m_pTab->GetCount(d, 0); // see if the weldable kmer exists among the reads and get read count.
-        weldable_kmer_read_count = count;
-        
-
-        if (DEBUG) 
-            cerr << "got weldable candidate: " << d.AsString() << " with count: " << weldable_kmer_read_count << endl;
-        
-
-        if (count >= thresh) {
-
-            /* 
-               if (SimpleHalves(d)) {
-               cerr << "Error, halves of weldmer " << d.AsString() << " were found to fail the simple test....  FIXME" << endl;
-               exit(3);
-               } 
-            */
-            
-            welding_kmer = d.AsString();
-
-            return true;
-            
-        }
-        else
-            return false;
-    }
-
-
-    int weldmer_count_in_reads(const DNAVector weldmer) 
-    {
-        // weldmer created outside function and provided as input.
-                
-        int count = m_pTab->GetCount(weldmer, 0); // see if the weldable kmer exists among the reads and get read count.
-        
-        return(count);
-    }
-
-    
-private:
-    NonRedKmerTable * m_pTab;
-    
-    int m_k;
-    int m_kk;
-};
 
 void Add(vecDNAVector & all, DNAVector & add, int & counter) 
 {
@@ -1051,30 +945,6 @@ void add_unclustered_iworm_contigs (svec<Pool>& clustered_pools, vecDNAVector& d
     }
     
 }
-
-struct config
-{
-	string aString;
-	bool sStrand;
-	string readString;
-	int num_threads;
-	bool REPORT_WELDS;
-    double glue_factor;
-    int min_glue_required;
-	int pooling_kmer_size;
-	int welding_kmer_size;
-	double min_iso_ratio;
-    bool bNoWeld;
-    string scaffolding_filename;
-	float MIN_KMER_ENTROPY;
-	float MIN_WELD_ENTROPY;  // min entropy for each half of a welding mer (kk)
-	float MAX_RATIO_INTERNALLY_REPETITIVE;
-
-	int MAX_CLUSTER_SIZE;
-	int MIN_CONTIG_LENGTH;
-
-	config() : MIN_KMER_ENTROPY(1.3), MIN_WELD_ENTROPY(1.3), MAX_RATIO_INTERNALLY_REPETITIVE(0.85), MAX_CLUSTER_SIZE(100), MIN_CONTIG_LENGTH(24) {}
-};
 
 config load_config(int argc,char** argv)
 {

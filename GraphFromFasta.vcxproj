@@ -86,9 +86,11 @@
     <ClCompile Include="mutil.cc" />
     <ClCompile Include="NonRedKmerTable.cc" />
     <ClCompile Include="StringUtil.cc" />
+    <ClCompile Include="Welder.cc" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AACodons.h" />
+    <ClInclude Include="config.h" />
     <ClInclude Include="DeBruijnGraph.h" />
     <ClInclude Include="DNAUtil.h" />
     <ClInclude Include="DNAVector.h" />
@@ -100,6 +102,7 @@
     <ClInclude Include="NonRedKmerTable.h" />
     <ClInclude Include="sequenceUtil.h" />
     <ClInclude Include="StringUtil.h" />
+    <ClInclude Include="Welder.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

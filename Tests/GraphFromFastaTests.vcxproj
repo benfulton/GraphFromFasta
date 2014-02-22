@@ -90,6 +90,7 @@
     <ClCompile Include="..\mutil.cc" />
     <ClCompile Include="..\NonRedKmerTable.cc" />
     <ClCompile Include="..\StringUtil.cc" />
+    <ClCompile Include="..\Welder.cc" />
     <ClCompile Include="GraphFromFastaTests.cpp" />
   </ItemGroup>
   <ItemGroup>
