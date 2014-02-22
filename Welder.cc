@@ -105,3 +105,147 @@ int Welder::weldmer_count_in_reads(const DNAVector weldmer)
         
     return(count);
 }
+
+bool is_simple_repeat(const DNAVector& kmer, float MAX_RATIO_INTERNALLY_REPETITIVE) {
+    
+    // in the future, should just do SW alignment
+    // for now, compare all half-kmers
+    
+
+    string best_left_kmer;
+    string best_right_kmer;
+    int best_left_pos = 0;
+    int best_right_pos = 0;
+    float max_repetitive_ratio = 0;
+
+
+    int mid_kmer_length = kmer.isize()/2;
+    
+    for (int i = 0; i < mid_kmer_length; i++) {
+
+        for (int j = i+1; j <= mid_kmer_length; j++) {
+        
+            int ref_kmer_pos = i;
+            int internal_kmer_pos = j;
+                    
+
+            // compare half-kmers
+            
+            int bases_compared = 0;
+            int bases_common = 0;
+     
+            stringstream left_kmer;
+            stringstream right_kmer;
+            
+
+            while (internal_kmer_pos <= j + mid_kmer_length - 1) {
+                bases_compared++;
+                if (kmer[ref_kmer_pos] == kmer[internal_kmer_pos]) {
+                    bases_common++;
+                }
+                
+                //if (DEBUG) {
+                    left_kmer << kmer[ref_kmer_pos];
+                    right_kmer << kmer[internal_kmer_pos];
+                    //}
+
+                
+                ref_kmer_pos++;
+                internal_kmer_pos++;
+            }
+            
+            float ratio_same = (float)bases_common/bases_compared;
+            if (ratio_same > max_repetitive_ratio) {
+                max_repetitive_ratio = ratio_same;
+                best_left_kmer = left_kmer.str();
+                best_right_kmer = right_kmer.str();
+                best_left_pos = i;
+                best_right_pos = j;
+            }
+
+
+            if ((! DEBUG) && ratio_same >= MAX_RATIO_INTERNALLY_REPETITIVE) {
+                
+                // quickest way of exiting this function.  No reason to capture the most repetitive kmer since we're not showing it.
+                return(true);
+            }
+            
+        }
+           
+    }
+
+        
+    if (DEBUG) {
+        #pragma omp critical
+        cout << "# " << kmer.AsString() << " most repetitive kmers:: (" << best_left_pos << "," << best_right_pos << ") " 
+             << best_left_kmer << ", " << best_right_kmer << " ratioID: "  << max_repetitive_ratio << endl;
+    }
+
+    if (max_repetitive_ratio > MAX_RATIO_INTERNALLY_REPETITIVE) {
+        
+        if (DEBUG) {
+            #pragma omp critical
+            cout << "# " << kmer.AsString() << " is internally repetitive: (" << best_left_pos << "," << best_right_pos << ") " 
+                 << best_left_kmer << ", " << best_right_kmer << " ratioID: "  << max_repetitive_ratio << endl;
+        }
+        
+        return(true);
+    }
+    else {
+        return(false); // not internally repetitive
+    }
+}
+
+
+
+bool SimpleHalves(const DNAVector & d, float MIN_WELD_ENTROPY, float MAX_RATIO_INTERNALLY_REPETITIVE) {
+    int len = d.isize();
+    int mid_pos = int(len/2);
+
+    DNAVector left;
+    left.resize(mid_pos);
+    for (int i = 0; i < mid_pos; i++) {
+        left[i] = d[i];
+    }
+    
+    DNAVector right;
+    right.resize(len - mid_pos);
+    int counter = 0;
+    for (int i = mid_pos; i < len; i++) {
+        right[counter] = d[i];
+        
+        counter++;
+    }
+
+    if (DEBUG) {
+        #pragma omp critical
+        {
+			cout << "## Left half: " << left.AsString() << ", en: " << compute_entropy(left.AsString());
+			cout << "\tRight half: " << right.AsString() << ", en: " << compute_entropy(right.AsString()) << endl;
+        }
+    }
+    
+	return (compute_entropy(left.AsString()) < MIN_WELD_ENTROPY 
+            || 
+			compute_entropy(right.AsString()) < MIN_WELD_ENTROPY
+            ||
+            is_simple_repeat(left, MAX_RATIO_INTERNALLY_REPETITIVE)
+            ||
+            is_simple_repeat(right, MAX_RATIO_INTERNALLY_REPETITIVE)
+
+            );
+}
+        
+void Add(vecDNAVector & all, DNAVector & add, int & counter) 
+{
+    #pragma omp critical
+    {
+        all.push_back(add);
+        counter++;
+    }
+    
+}
+
+
+
+

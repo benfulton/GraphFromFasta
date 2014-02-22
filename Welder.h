@@ -29,4 +29,6 @@ private:
     int m_kk;
 };
 
+bool SimpleHalves(const DNAVector & d, float MIN_WELD_ENTROPY, float MAX_RATIO_INTERNALLY_REPETITIVE);
+void Add(vecDNAVector & all, DNAVector & add, int & counter) ;
 	
